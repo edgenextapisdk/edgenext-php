@@ -9,6 +9,8 @@ namespace edgenextapisdk;
  */
 
 use edgenextapisdk\Http\HttpLib;
+use edgenextapisdk\Request\Request;
+use edgenextapisdk\Request\Signer;
 use InvalidArgumentException;
 use edgenextapisdk\Http\HttpOutput;
 use edgenextapisdk\Http\RawRequest;
@@ -22,7 +24,7 @@ use edgenextapisdk\HttpClients\HttpClientsFactory;
 
 class Sdk
 {
-    const SDK_VERSION = "1.0.3";
+    const SDK_VERSION = "2.0.0";
     private $app_id; //必需
     private $app_secret; //必需
     private $user_id; // 用户id, 仅代理需要
@@ -101,52 +103,32 @@ class Sdk
      */
     public function signedRequest(RawRequest $request)
     {
-        $body = [];
-        $body_string= '';
-        if ('json' == $request->getBodyType()) {
-            $body = $request->getBody();
-        } elseif ('array' == $request->getBodyType()) {
-            $body = $request->getBody();
+        $body_string = "";
+        if ('json' == $request->getBodyType() || 'array' == $request->getBodyType()) {
+            $body_string = json_encode($request->getBody());
         }
-        $body = array_merge($body,$request->getUrlParams());
-        $rMethod= strtoupper($request->getMethod());
-        if ('GET' == $rMethod) {
-            $body = $request->getUrlParams();
-        }
-        $body['algorithm'] = isset($body['algorithm']) ? $body['algorithm'] : 'HMAC-SHA256';
-        $body['issued_at'] = isset($body['issued_at']) ? $body['issued_at'] : time();
-
-        $paramsRequest =$body;
-        unset($paramsRequest['_route_']);
-        unset($paramsRequest['_files']);
-        unset($paramsRequest['command']);
-        if( isset($paramsRequest['route'])){
-            unset($paramsRequest['route']);
-        }
+        $this->request->setHeader("algorithm",isset($body['algorithm']) ? $body['algorithm'] : 'HMAC-SHA256');
+        $this->request->setHeader("issued_at",isset($body['issued_at']) ? $body['issued_at'] : time());
         //签名
-        $sign = SignedRequest::make($paramsRequest, $this->app_secret,$rMethod);
-        if ('json' == $request->getBodyType()) {
-            $body_string            = json_encode($body);
-        } elseif ('array' == $request->getBodyType()) {
-            $body_string            = json_encode($body);
-        }
-        if ('GET' == $rMethod) {
-            $this->request->setUrlParams($body);
-            $body_string            = RawRequest::build_query($body);
-        }
-        $this->request->setHeader('X-Auth-Sign', $sign);
-        $this->request->setHeader('X-Auth-App-Id', $this->app_id);
-        $this->request->setHeader('X-Auth-Sdk-Version', self::SDK_VERSION);
-        $url     = $request->getUrl();
-        $method  = $request->getMethod();
-        $headers = $request->getHeaders();
+        $signer = new Signer();
+        $signer->Key = $this->app_id;
+        $signer->Secret = $this->app_secret;
+        $req = new Request(
+            $this->request->getMethod(),
+            $this->request->getUrl(),
+            $this->request->getHeaders(),
+            $body_string
+        );
+        $signReq = $signer->sign($req);
+        // 签名重写了url header
+        $url     = $signReq->rawUrl;
+        $headers = $signReq->headers;
+        $method  = $signReq->method;
+        $body = $signReq->body;
         $timeOut = $request->getTimeOut();
         $options = $request->getOptions();
         $this->log('请求参数-request对象-' . print_r($request, true));
-
-        $RawResponse = $this->http_client_handler->send($url, $method, $body_string, $headers, $timeOut, $options);
-
-        return $RawResponse;
+        return $this->http_client_handler->send($url, $method, $body, $headers, $timeOut, $options);
     }
 
     /**
@@ -174,24 +156,20 @@ class Sdk
             'options' => [],
         ];
         $request        = array_merge($defaultRequest, $request);
-
         $defaultData = [
             'user_id'          => $this->user_id,
             'client_ip'        => $this->client_ip,
             'client_userAgent' => $this->client_userAgent,
             'fromadmin'        => isset($_SESSION['fromadmin']) ? intval($_SESSION['fromadmin']) : 0,
         ];
-
         foreach ($request['headers'] as $h => $v) {
             $hs = strtolower($h);
             $vs = strtolower($v);
-
             if ('content-type' == $hs) {
                 unset($request['headers'][$h]);
                 $request['headers']['Content-Type'] = $vs;
             }
         }
-
         if (is_string($request['body'])) {
             $json_decode_content = HttpLib::isCorrectJson($request['body']);
             if (false === $json_decode_content) {
@@ -214,16 +192,13 @@ class Sdk
         } else {
             throw new SdkException(ExceptionCodeMsg::MSG_SDK_BUILD_REQUEST_1, ExceptionCodeMsg::CODE_SDK_BUILD_REQUEST_1);
         }
-
         if ('GET' == strtoupper($request['method'])) {
             $request['query'] = array_merge($defaultData, $request['query']);
         }
-
         if (isset($request['options']['async']) && $request['options']['async']) {
             $request['options']['callback']  = isset($request['options']['callback']) ? $request['options']['callback'] : [$this, 'async_callback'];
             $request['options']['exception'] = isset($request['options']['exception']) ? $request['options']['exception'] : [$this, 'async_callback_exception'];
         }
-
         $this->request->setBody($request['body']);
         $this->request->setUrl($request['url']);
         $this->request->setMethod($request['method']);
@@ -236,7 +211,6 @@ class Sdk
         }
         $this->request->setUrlParams($request['query']);
         $this->request->setOptions($request['options']);
-
         return $this->request;
     }
 
@@ -266,7 +240,6 @@ class Sdk
 //                'exception' => function(){}
 //            ]
 //        );
-
         $httpRequest = $this->build_request($request);
         try {
             $rawResponse = $this->signedRequest($httpRequest);
@@ -275,17 +248,14 @@ class Sdk
                 $this->log('sync response headers:' . print_r($rawResponse->getHeaders(), true));
                 $this->log('sync response body:' . print_r($rawResponse->getBody(), true));
                 $this->log('sync response http_status_code:' . print_r($rawResponse->getHttpResponseCode(), true));
-
                 $this->syncResponse = [
                     'headers' => $rawResponse->getHeaders(),
                     'body' => $rawResponse->getBody(),
                     'httpCode' => $rawResponse->getHttpResponseCode(),
                 ];
-
                 return $body;
             }else if(isset($request['options']['async']) && $request['options']['async']){
                 $body = $this->asyncResponse['body'];
-
                 return $body;
             }
         } catch (HttpClientException $e) {
