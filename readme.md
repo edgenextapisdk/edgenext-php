@@ -71,7 +71,7 @@ $request = [
         "page" => 1,
         "pagesize" => 10,
         "data" => [
-            "name" => "name名称",
+            "name" => "name",
             "domain" => "baidu.com",
         ],
     ],
@@ -94,7 +94,7 @@ $request = [
         "page" => 1,
         "pagesize" => 10,
         "data" => [
-            "name" => "name名称",
+            "name" => "name",
             "domain" => "baidu.com",
         ],
     ],
@@ -212,8 +212,6 @@ The SDK uses HMAC-SHA256 for request signing:
 
 - **Client Side**: Parameters are base64 encoded and signed with the app_secret using SHA256. The signature is included in each request.
 - **Server Side**: The server uses the same algorithm to sign the parameters and verifies the signature.
-
-## Changelog
 
 ## License
 
