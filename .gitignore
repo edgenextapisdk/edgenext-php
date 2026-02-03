@@ -1,3 +1,6 @@
+# IDE
+.idea/
+
 /vendor/bin/php-cs-fixer
 /vendor/bin/php-parse
 /vendor/bin/phpunit
