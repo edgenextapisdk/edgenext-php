@@ -92,6 +92,11 @@ class Sdk
         $this->http_client_handler = HttpClientsFactory::createHttpClient($handler);
     }
 
+    public function getBaseApiUrl()
+    {
+        return $this->base_api_url;
+    }
+
     /**
      * @param RawRequest $request
      *

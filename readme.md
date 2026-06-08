@@ -62,6 +62,26 @@ try {
 
 ### Making Requests
 
+#### Generated API Wrapper
+
+The SDK includes generated EdgeNext V5 API wrappers on top of the low-level request methods. Wrapper methods return the decoded apidoc response body array and raise `ApiException` for business errors.
+
+```php
+use edgenextapisdk\Generated\EdgeNextClient;
+use edgenextapisdk\Generated\Requests\AddDomainsRequest;
+use edgenextapisdk\Generated\Requests\ListDomainsRequest;
+
+$client = (new EdgeNextClient($sdk))->withLanguage('en');
+
+$listResult = $client->listDomains((new ListDomainsRequest())
+    ->setPage(1)
+    ->setPageSize(20));
+
+$addResult = $client->addDomains((new AddDomainsRequest())
+    ->setDomain('www.example.com')
+    ->setGroupId(1));
+```
+
 #### GET Request
 
 ```php
